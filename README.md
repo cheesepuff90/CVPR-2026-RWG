@@ -37,8 +37,10 @@ We recommend using **Conda** to manage dependencies. A `environment.yml` file is
 ### 3.1 Create the Environment
 Run the following commands to create and activate the environment:
 
-    conda env create -f environment.yml
-    conda activate seeds
+```text
+conda env create -f environment.yml
+conda activate seeds
+```
 
 *Note: The environment file installs PyTorch via pip. Ensure that the installed version of PyTorch is compatible with your system's CUDA/cuDNN version. You may need to reinstall PyTorch with specific CUDA support if the default install does not match your drivers (see [pytorch.org](https://pytorch.org/get-started/locally/)).*
 
