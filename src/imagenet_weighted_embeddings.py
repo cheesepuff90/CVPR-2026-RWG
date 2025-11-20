@@ -96,7 +96,7 @@ def per_model_tmpcache(tag: str, base: Path | None = None, min_free_gb: int = 15
         if free < min_free_gb * (1 << 30):
             raise OSError(28, f"Not enough free space in {base_root} (<{min_free_gb} GB).")
     except Exception:
-        # best-effort; don’t hard-fail on weird filesystems
+        # best-effort; dont hard-fail on weird filesystems
         pass
 
     slug = re.sub(r'[^a-zA-Z0-9._-]+', '_', str(tag))
@@ -163,40 +163,51 @@ def _compute_rdm_vec(X: np.ndarray, metric='correlation') -> tuple[np.ndarray, n
 
 def _iterative_reweight(
     E: np.ndarray,
-    norm: str = "zscore", # "minmax" | "zscore" | "rank"
-    corr_mode: str = "pearson", # "pearson" | "spearman"
-    weight_mode: str = "huber", # "inverse" | "softmax" | "huber" | "tukey"
-    tau: float = 0.05, # temperature for softmax
     eps_abs: float = 1e-6,
     eps_rel: float = 1e-6,
     max_iter: int = 100
 ):
+    """
+    Iterative reweighting using Tukey's biweight for robust averaging.
+    
+    Args:
+        E: Array of shape [n_subjects, n_features]
+        eps_abs: Absolute convergence tolerance
+        eps_rel: Relative convergence tolerance
+        max_iter: Maximum number of iterations
+    
+    Returns:
+        w: Subject weights [n_subjects]
+        E_mean: Robust mean [n_features]
+        n_iter: Number of iterations until convergence
+        E_norm: Z-score normalized data [n_subjects, n_features]
+    """
     E = E.astype(np.float32)
-    # print('before norm:', E.mean(axis=1, keepdims=True), E.std(axis=1, keepdims=True))
+    E_norm = E
 
-    # --- normalization ---
-    if norm == "minmax":
-        E_min = E.min(axis=1, keepdims=True)
-        E_max = E.max(axis=1, keepdims=True)
-        E_norm = (E - E_min) / (E_max - E_min + 1e-8)
-    elif norm == "rank":
-        from scipy.stats import rankdata
-        E_norm = np.apply_along_axis(rankdata, 1, E).astype(np.float32)
-    else:  # zscore
-        mu = E.mean(axis=1, keepdims=True)
-        sd = E.std(axis=1, keepdims=True) + 1e-8
-        E_norm = (E - mu) / sd
+    # # --- Z-score normalization per subject
+    # mu = E.mean(axis=1, keepdims=True)
+    # sd = E.std(axis=1, keepdims=True) + 1e-8
+    # E_norm = (E - mu) / sd
 
-    # Spearman means Pearson on ranked data
-    if corr_mode == "spearman" and norm != "rank":
-        from scipy.stats import rankdata
-        E_norm = np.apply_along_axis(rankdata, 1, E_norm).astype(np.float32)
+    # # === Z-SCORE NORMALIZATION DIAGNOSTICS ===
+    # if True:  # Set to False to disable
+    #     print(f"\n    === Z-SCORE NORMALIZATION IMPACT ===")
+    #     print(f"    BEFORE normalization:")
+    #     print(f"      E[0]: mean={E[0].mean():.6f}, std={E[0].std():.6f}")
+    #     print(f"      E[1]: mean={E[1].mean():.6f}, std={E[1].std():.6f}")
+    #     print(f"      Raw correlation E[0] vs E[1]: {np.corrcoef(E[0], E[1])[0,1]:.6f}")
+        
+    #     print(f"    AFTER normalization:")
+    #     print(f"      E_norm[0]: mean={E_norm[0].mean():.6f}, std={E_norm[0].std():.6f}")
+    #     print(f"      E_norm[1]: mean={E_norm[1].mean():.6f}, std={E_norm[1].std():.6f}")
+    #     print(f"      Normalized correlation E_norm[0] vs E_norm[1]: {np.corrcoef(E_norm[0], E_norm[1])[0,1]:.6f}")
 
     # Precompute constants
     E_center = E_norm - E_norm.mean(axis=1, keepdims=True)
     row_norms = np.linalg.norm(E_center, axis=1)
 
-    # Init with robust mean
+    # Initialize with median
     E_mean = np.median(E_norm, axis=0)
     w = np.ones(E_norm.shape[0], dtype=np.float32)
     w_prev = w.copy()
@@ -205,42 +216,68 @@ def _iterative_reweight(
         E_old = E_mean.copy()
         mean_center = E_mean - E_mean.mean()
 
+        # Compute correlation between each subject and current mean
         denom = row_norms * (np.linalg.norm(mean_center) + 1e-9)
         numer = E_center @ mean_center
         corr = numer / np.where(denom == 0, 1e-9, denom)
         corr = np.clip(corr, -0.999999, 0.999999)
 
-        # --- weighting ---
-        if weight_mode == "inverse":
-            dist = 1.0 - corr
-            w = 1.0 / (1.0 + dist)
-        elif weight_mode == "softmax":
-            w = np.exp(corr / max(tau, 1e-6)); w /= (w.sum() + 1e-9)
-        elif weight_mode == "huber":
-            r = 1.0 - corr
-            s = np.median(np.abs(r - np.median(r))) + 1e-9  # robust scale
-            t = r / (1.345 * s)
-            w = 1.0 / np.maximum(1.0, np.abs(t))  # approximate Huber weights
-        else:  # "tukey" (bisquare)
-            r = 1.0 - corr
-            s = np.median(np.abs(r - np.median(r))) + 1e-9
-            t = r / (4.685 * s)
-            w = (1 - t**2)**2
-            w[t >= 1] = 0.0
+         # DEBUG: First iteration diagnostics
+        if it == 0:
+            print(f"\n    === ITERATION 0 DIAGNOSTICS ===")
+            print(f"    E_norm shape: {E_norm.shape}")
+            print(f"    E_center shape: {E_center.shape}")
+            print(f"    mean_center shape: {mean_center.shape}")
+            print(f"    row_norms: min={row_norms.min():.6f}, max={row_norms.max():.6f}, mean={row_norms.mean():.6f}")
+            print(f"    ||mean_center||: {np.linalg.norm(mean_center):.6f}")
+            print(f"    numer (dot products): min={numer.min():.6f}, max={numer.max():.6f}, mean={numer.mean():.6f}")
+            print(f"    denom: min={denom.min():.6f}, max={denom.max():.6f}, mean={denom.mean():.6f}")
+            print(f"    corr (before clip): min={corr.min():.6f}, max={corr.max():.6f}, mean={corr.mean():.6f}")
 
-        w = np.clip(w, 1e-8, None)
-        # Weighted average
+        # Tukey's biweight weighting
+        # r = 1.0 - corr  # Residual
+        # s = np.median(np.abs(r - np.median(r))) + 1e-9  # Scale estimate (MAD)
+        # t = r / (4.685 * s)  # Normalized residual (4.685 for 95% efficiency)
+        # # Use much larger tuning constant for homogeneous data
+
+        r = 1.0 - corr
+        r_centered = r - np.median(r)               # now median(r_centered) ≈ 0
+        s = np.median(np.abs(r_centered)) + 1e-9    # MAD of centered residuals
+        # t = r_centered / (4.685 * s)               # or a slightly larger constant if you like
+        t = r / (1.345 * s)
+        w = 1.0 / np.maximum(1.0, np.abs(t))
+
+
+        if it == 0:
+            print(f"    r (1-corr): min={r.min():.6f}, max={r.max():.6f}, mean={r.mean():.6f}")
+            print(f"    median(r): {np.median(r):.6f}")
+        
+        # w = (1 - t**2)**2
+        # w[t >= 1] = 0.0  # Zero weight for extreme outliers
+
+        # w = 1.0 / (1.0 + (t / 2.0)**2)  # Soft decay function
+
+        if it == 0:
+            print(f"    w (before clip): min={w.min():.6f}, max={w.max():.6f}, sum={w.sum():.6f}")
+
+        w = np.clip(w, 1e-8, None)  # Ensure positive weights
+
+        # Compute weighted average
         E_mean = np.average(E_norm, axis=0, weights=w)
 
-        # Stopping
+        # Check convergence
         delta = np.linalg.norm(E_mean - E_old)
         rel = delta / (np.linalg.norm(E_old) + 1e-9)
-        dw  = np.linalg.norm(w - w_prev) / (np.linalg.norm(w_prev) + 1e-9)
+        dw = np.linalg.norm(w - w_prev) / (np.linalg.norm(w_prev) + 1e-9)
         w_prev = w.copy()
+        
         if (delta < eps_abs or rel < eps_rel) and dw < 1e-6:
             break
 
-    # print('after norm:', E.mean(axis=1, keepdims=True), E.std(axis=1, keepdims=True))
+    print(f"    Converged in {it+1} iterations")
+    print(f"    Subject weights: min={w.min():.3f}, max={w.max():.3f}, "
+                  f"mean={w.mean():.3f}, std={w.std():.3f}")
+
     return w, E_mean, it + 1, E_norm
 
 
@@ -302,7 +339,7 @@ def _timm_pretrained_models():
 _SMALL_MID_ALLOW = re.compile(
     r"(?:^|[_\-])(tiny|small|base|nano|micro|mini|lite|pico|femto|atto)(?:$|[_\-])"
     r"|efficientnet_b[0-4]\b"
-    r"|regnet[xy].*(?:0\.[0-9]|1\.[0-9]|2\.[0-9]|3\.[0-9]|4\.[0-9])"   # ~≤4GF lines
+    r"|regnet[xy].*(?:0\.[0-9]|1\.[0-9]|2\.[0-9]|3\.[0-9]|4\.[0-9])"   # ~d4GF lines
     r"|convnext(?:_v2)?_(?:atto|femto|pico|nano|tiny|small|base)\b"
     r"|vit_(?:tiny|small|base)\b"
     r"|deit_(?:tiny|small|base)\b"
@@ -376,7 +413,7 @@ def _register_all_layers_safely(model: nn.Module, leaf_only: bool = True):
         r"\b(layerscale|layer_scale)\b",
     ])
 
-    # things we DO want to keep even if they’re simple (readouts / stage boundaries)
+    # things we DO want to keep even if theyre simple (readouts / stage boundaries)
     _KEEP_NAME_PATTERNS = tuple(re.compile(p) for p in [
         r"\b(stem|patch_embed|conv1)\b",
         r"\b(layer[1-4](?:\.\d+)?(?:_out)?)\b",          # resnet stages / blocks
@@ -392,7 +429,7 @@ def _register_all_layers_safely(model: nn.Module, leaf_only: bool = True):
         return any(p.search(lname) for p in _KEEP_NAME_PATTERNS)
 
     def _should_skip_micro(module: nn.Module, name: str) -> bool:
-        # skip known micro layers unless they’re meaningful readouts by name
+        # skip known micro layers unless theyre meaningful readouts by name
         if isinstance(module, _MICRO_TYPES) and not _looks_meaningful(name):
             return True
         lname = name.lower()
@@ -474,7 +511,7 @@ def _register_all_layers_safely(model: nn.Module, leaf_only: bool = True):
                     # offload to CPU immediately to release GPU memory
                     activations[nm] = t.detach().to("cpu", copy=True).contiguous()
                 except Exception:
-                    # swallow edge cases; don’t kill the run for one layer
+                    # swallow edge cases; dont kill the run for one layer
                     pass
             return _hook
 
@@ -557,7 +594,7 @@ def run_nod_pipeline_pretrained(
 
         with per_model_tmpcache(mid, base_tmp):
             try:
-                print(f"[PRETRAINED][{arch_key}] loading …")
+                print(f"[PRETRAINED][{arch_key}] loading &")
                 model, transform, _ = _timm_model_and_transform(mid, device)
 
                 # dataset/loader with model-native preprocessing
@@ -623,14 +660,14 @@ def run_nod_pipeline_pretrained(
 
                 # build per-layer RDMs
                 kept_layers = [ln for ln in class_sums.keys()]
-                print(f"[PRETRAINED]building RDM for {len(kept_layers)} layers …")
+                print(f"[PRETRAINED]building RDM for {len(kept_layers)} layers &")
 
                 layer_rdms_mat, layer_rdms_vec = [], []
                 for ln in kept_layers:
                     cc = class_counts[ln]          # shape [C]
                     mask = cc > 0
                     if mask.sum() < 2:
-                        continue                   # need ≥2 classes for an RDM
+                        continue                   # need e2 classes for an RDM
                     Xc = (class_sums[ln][mask] / cc[mask, None]).astype(np.float32)
                     D, v = _compute_rdm_vec(Xc, metric="correlation")
                     layer_rdms_mat.append(D.astype(np.float32))
@@ -1058,10 +1095,10 @@ def _ridge_fit_single_target(X: np.ndarray,
             # PRIMAL: eig of G = Xtr^T Xtr
             G = (Xtr.T @ Xtr).astype(np.float64, copy=False)
             b = (Xtr.T @ ytr_c).astype(np.float64, copy=False)
-            # Symmetric → eigh
+            # Symmetric � eigh
             evals, V = np.linalg.eigh(G)  # G = V diag(evals) V^T
             Vt_b = V.T @ b
-            # For validation predictions, we’ll need Xvl @ w(a)
+            # For validation predictions, well need Xvl @ w(a)
             per_fold_cache.append(("primal", (evals, V, Vt_b, Xvl)))
         else:
             # DUAL: eig of K = Xtr Xtr^T (size m x m)

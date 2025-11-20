@@ -1,20 +1,4 @@
 #!/usr/bin/env python3
-"""
-train.py
-
-Unified entry for the Seeds project:
-    --mode all        : train -> test -> inference
-    --mode train      : train only (saves checkpoints)
-    --mode test       : test only (uses saved checkpoints, saves NPZ embeddings/weights/RDMs)
-    --mode inference  : inference only (loads NPZs from test step, aligns to human RDMs)
-
-- Training uses DDP if --distributed and >1 GPU; test/inference run single-process on rank 0.
-- Test saves per-arch / per-layer NPZs:
-    {ckpt_root}/{arch}/{arch}_{layer}_seed_embeddings_weighted_{image|class}.npz
-  Each NPZ has: embeddings [n_seeds, n_distances], weights [n_seeds].
-- Inference loads those NPZs, aggregates across layers (concat embeddings, mean weights),
-  runs fMRI weighting, and calls compare_outliers.
-"""
 from __future__ import annotations
 import argparse, sys, os, time, json, glob
 from pathlib import Path
@@ -27,9 +11,7 @@ import torch.distributed as dist
 import torch.multiprocessing as mp
 
 # local modules
-from config_util import load_config, prepare_folders
 import imagenet_weighted_embeddings as iwe
-
 
 # ---------------- CLI ----------------
 
@@ -256,8 +238,8 @@ def run_inference_per_layer(cfg, args, ckpt_root: Path) -> dict[str, Any]:
     # Preferred filename pattern includes rdm_level and #arch
     # pl_npz_name  = f"pretrained_nod_rdms_per_layer_class_{arch_count}.npz"
     # pl_meta_name = f"pretrained_nod_rdms_per_layer_meta_class_{arch_count}.json"
-    pl_npz_name  = f"timm_pretrained_nod_rdms_2.npz"
-    pl_meta_name = f"timm_pretrained_nod_rdms_2.json"
+    pl_npz_name  = f"timm_pretrained_nod_rdms_6.npz"
+    pl_meta_name = f"timm_pretrained_nod_rdms_6.json"
     pl_npz_path  = out_root / pl_npz_name
     pl_meta_path = out_root / pl_meta_name
 
@@ -325,7 +307,7 @@ def run_inference_per_layer(cfg, args, ckpt_root: Path) -> dict[str, Any]:
     any_arch = next(iter(nod_rdms_per_layer))
     D = nod_rdms_per_layer[any_arch].shape[2]
     
-    _ = iwe.export_layerwise_alignment_pre_ridge(nod_rdms_per_layer, per_arch, roi_results, out_root, args)
+    # _ = iwe.export_layerwise_alignment_pre_ridge(nod_rdms_per_layer, per_arch, roi_results, out_root, args)
 
     # -------------------------------------------------------------
     # 3) Per-seed layer ridge vs fMRI simple & reweighted means
