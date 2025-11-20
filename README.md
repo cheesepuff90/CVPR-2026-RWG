@@ -103,10 +103,7 @@ python train.py --mode pretrained --config configs/default.yaml
 This stage performs the RWG algorithm on the fMRI data, fits layer-wise Ridge Regressions for the models, and computes Spearman correlations.
 
 ```bash
-python train.py \
-  --mode inference \
-  --config configs/default.yaml \
-  --fmri-rdm-file /path/to/fmri_rdms
+python train.py --mode inference --config configs/default.yaml --fmri-rdm-file /path/to/fmri_rdms
 ```
 
 **What happens in this stage:**
