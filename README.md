@@ -25,8 +25,9 @@ We implement **Representation-Weighted Grouping (RWG)**. For each Region of Inte
 │   └── default.yaml # Main configuration (paths, batch size)
 ├── configs/
 │   └── imagenet_weighted_embeddings.py # Core logic: RWG + Alignment + Ridge Regression
-│   └── train.py # CLI entrypoint
-├── present.ipynb # plots, figures visualization
+│   └── train.py    # CLI entrypoint
+├── present.ipynb   # plots, figures visualization
+├── environment.yml # conda env
 └── README.md
 ```
 
