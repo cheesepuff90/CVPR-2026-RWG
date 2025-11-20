@@ -22,11 +22,11 @@ We implement **Representation-Weighted Grouping (RWG)**. For each Region of Inte
 ```text
 .
 ├── configs/
-│   └── default.yaml               # Main configuration (paths, batch size)
-├── imagenet_weighted_embeddings.py  # Core logic: RWG + Alignment + Ridge Regression
-├── train.py                       # CLI entrypoint
-├── ckpts/                         # Checkpoint root
-├── outputs/                       # Results: NPZs, ROI CSVs, logs
+│   └── default.yaml # Main configuration (paths, batch size)
+├── configs/
+│   └── imagenet_weighted_embeddings.py # Core logic: RWG + Alignment + Ridge Regression
+│   └── train.py # CLI entrypoint
+├── present.ipynb # plots, figures visualization
 └── README.md
 ```
 
@@ -70,24 +70,7 @@ You need pre-computed RDM vectors for your subjects. The pipeline expects a dire
 
 ## 5. Configuration
 
-Edit `configs/default.yaml` to point to your data paths:
-
-```yaml
-run_mode: full
-experiment_name: default
-data:
-  nod_root: /path/to/NOD_images
-  fmri_rdm_file: /path/to/fmri_rdms
-training:
-  batch_size: 64
-  device: cuda
-  architectures: [] # Not used in pretrained mode, kept for consistency
-paths:
-  checkpoint_root: ckpts/default_run
-  output_root: outputs/default_run
-misc:
-  num_workers: 8
-```
+Edit `configs/default.yaml` to point to your data paths.
 
 ## 6. Usage
 
