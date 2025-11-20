@@ -10,8 +10,8 @@ experiment_name: default   #  used for output folders / checkpoints
 #  DATA PATHS
 # ----------------------------------------------------------------------
 data:
-  fmri_rdm_file: /home/wallacelab/teba/multimodal_brain_inspired/NOD/Nick_RDMs/outputs
-  nod_root: /home/wallacelab/teba/multimodal_brain_inspired/NOD/imagenet
+  fmri_rdm_file: /your/path/to/fmri_rdms.npy
+  nod_root: /your/path/to/fmri_rdms.npy
 
 # ----------------------------------------------------------------------
 #  TRAINING + MODEL HYPERPARAMETERS
@@ -30,7 +30,7 @@ training:
 #  OUTPUT LOCATIONS
 # ---------------------------------------------s-------------------------
 paths:
-  output_root:    /home/wallacelab/teba/multimodal_brain_inspired/seeds_checkpoints/pretrained/nonorm_huber/new6
+  output_root:    /your/path/to/outputs/${run_mode}/${experiment_name}
   metrics_csv:    ${paths.output_root}/metrics_classification.csv
   seed_weights_file:  ${paths.output_root}/seed_weights.npz
   human_weights_file: ${paths.output_root}/human_weights.npz
