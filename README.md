@@ -32,13 +32,23 @@ We implement **Representation-Weighted Grouping (RWG)**. For each Region of Inte
 
 ## 3. Installation
 
-This pipeline requires Python 3.9+.
+We recommend using **Conda** to manage dependencies. A `environment.yml` file is provided to ensure a reproducible environment.
 
-```bash
-pip install numpy scipy scikit-learn matplotlib pandas torch torchvision timm
-```
+### 3.1 Create the Environment
+Run the following commands to create and activate the environment:
 
-*Note: Ensure you install the version of PyTorch compatible with your CUDA/cuDNN version.*
+    conda env create -f environment.yml
+    conda activate seeds
+
+*Note: The environment file installs PyTorch via pip. Ensure that the installed version of PyTorch is compatible with your system's CUDA/cuDNN version. You may need to reinstall PyTorch with specific CUDA support if the default install does not match your drivers (see [pytorch.org](https://pytorch.org/get-started/locally/)).*
+
+### 3.2 Dependencies
+If you need to install manually, the core requirements are:
+* **Python 3.11**
+* **Deep Learning:** `torch >= 2.2`, `torchvision >= 0.17`, `timm`
+* **Neuroimaging:** `nilearn`, `nibabel`
+* **Data:** `datalad`, `git-annex`, `pandas`, `numpy`, `scipy`
+* **Vis:** `matplotlib`, `seaborn`, `streamlit`
 
 ## 4. Data Preparation
 
