@@ -1,4 +1,4 @@
-# Weighted-Normative Embeddings
+# Representation-Weighted Grouping
 
 **A plug-and-play pipeline for brain–AI alignment.**
 
