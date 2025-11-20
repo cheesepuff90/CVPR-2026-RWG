@@ -235,9 +235,6 @@ def run_inference_per_layer(cfg, args, ckpt_root: Path) -> dict[str, Any]:
     # -------------------------------------------------------
     # 2) Load-or-compute NOD per-layer RDMs (with caching)
     # -------------------------------------------------------
-    # Preferred filename pattern includes rdm_level and #arch
-    # pl_npz_name  = f"pretrained_nod_rdms_per_layer_class_{arch_count}.npz"
-    # pl_meta_name = f"pretrained_nod_rdms_per_layer_meta_class_{arch_count}.json"
     pl_npz_name  = f"timm_pretrained_nod_rdms_6.npz"
     pl_meta_name = f"timm_pretrained_nod_rdms_6.json"
     pl_npz_path  = out_root / pl_npz_name
@@ -307,7 +304,7 @@ def run_inference_per_layer(cfg, args, ckpt_root: Path) -> dict[str, Any]:
     any_arch = next(iter(nod_rdms_per_layer))
     D = nod_rdms_per_layer[any_arch].shape[2]
     
-    # _ = iwe.export_layerwise_alignment_pre_ridge(nod_rdms_per_layer, per_arch, roi_results, out_root, args)
+    _ = iwe.export_layerwise_alignment_pre_ridge(nod_rdms_per_layer, per_arch, roi_results, out_root, args)
 
     # -------------------------------------------------------------
     # 3) Per-seed layer ridge vs fMRI simple & reweighted means
@@ -356,16 +353,6 @@ def main():
     args, overrides = parse_cli()
     cfg = load_config(args.config, overrides)
     prepare_folders(cfg)
-
-    # dataset roots
-    dataset_type = cfg["data"].get("dataset", "imagenet_tiny")
-    data_root = {
-        "cifar10":       cfg["data"].get("cifar10_root"),
-        "cifar100":      cfg["data"].get("cifar100_root"),
-        "imagenet_tiny": cfg["data"].get("imagenet_tiny_root"),
-    }.get(dataset_type, cfg["data"].get("imagenet_full_root"))
-    if data_root is None:
-        raise RuntimeError(f"Missing data root for dataset '{dataset_type}' in config.")
 
     ckpt_root = Path(cfg["paths"]["checkpoint_root"])
 

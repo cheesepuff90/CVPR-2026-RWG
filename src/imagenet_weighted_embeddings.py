@@ -1,13 +1,3 @@
-#!/usr/bin/env python3
-"""
-imagenet_weighted_embeddings.py
-
-Heavy-lifting pipeline for weighted normative embeddings.
-Provides:
-  - run_seed_pipeline
-  - run_mri_weighting
-  - compare_outliers
-"""
 from __future__ import annotations
 from typing import List, Dict, Any, Optional, Iterable, Tuple
 import os, tempfile
@@ -67,7 +57,6 @@ def _hf_hotpatch_from_env():
         if hh: hf_c.HF_HUB_CACHE = Path(hh)
         if hf: hf_c.HF_HOME      = Path(hf)
         if tr: hf_c.TRANSFORMERS_CACHE = Path(tr)
-        # some versions also read a copy in file_download
         try:
             import huggingface_hub.file_download as fd
             if hh: fd.HF_HUB_CACHE = Path(hh)
@@ -82,7 +71,6 @@ def per_model_tmpcache(tag: str, base: Path | None = None, min_free_gb: int = 15
     Route *all* caches (HF/timm/torch/xdg) into a per-model dir and nuke it afterwards.
     Also hot-patch HF constants so paths really switch per model.
     """
-    # choose a base with space: env beats arg; default to HOME (avoid /tmp)
     base_root = (
         Path(os.environ["SEEDS_TMPCACHE_ROOT"]).expanduser()
         if "SEEDS_TMPCACHE_ROOT" in os.environ else
@@ -90,13 +78,11 @@ def per_model_tmpcache(tag: str, base: Path | None = None, min_free_gb: int = 15
     )
     base_root.mkdir(parents=True, exist_ok=True)
 
-    # check free space before downloading multi-GB weights
     try:
         free = shutil.disk_usage(str(base_root)).free
         if free < min_free_gb * (1 << 30):
             raise OSError(28, f"Not enough free space in {base_root} (<{min_free_gb} GB).")
     except Exception:
-        # best-effort; dont hard-fail on weird filesystems
         pass
 
     slug = re.sub(r'[^a-zA-Z0-9._-]+', '_', str(tag))
@@ -190,20 +176,6 @@ def _iterative_reweight(
     # sd = E.std(axis=1, keepdims=True) + 1e-8
     # E_norm = (E - mu) / sd
 
-    # # === Z-SCORE NORMALIZATION DIAGNOSTICS ===
-    # if True:  # Set to False to disable
-    #     print(f"\n    === Z-SCORE NORMALIZATION IMPACT ===")
-    #     print(f"    BEFORE normalization:")
-    #     print(f"      E[0]: mean={E[0].mean():.6f}, std={E[0].std():.6f}")
-    #     print(f"      E[1]: mean={E[1].mean():.6f}, std={E[1].std():.6f}")
-    #     print(f"      Raw correlation E[0] vs E[1]: {np.corrcoef(E[0], E[1])[0,1]:.6f}")
-        
-    #     print(f"    AFTER normalization:")
-    #     print(f"      E_norm[0]: mean={E_norm[0].mean():.6f}, std={E_norm[0].std():.6f}")
-    #     print(f"      E_norm[1]: mean={E_norm[1].mean():.6f}, std={E_norm[1].std():.6f}")
-    #     print(f"      Normalized correlation E_norm[0] vs E_norm[1]: {np.corrcoef(E_norm[0], E_norm[1])[0,1]:.6f}")
-
-    # Precompute constants
     E_center = E_norm - E_norm.mean(axis=1, keepdims=True)
     row_norms = np.linalg.norm(E_center, axis=1)
 
@@ -234,16 +206,9 @@ def _iterative_reweight(
             print(f"    denom: min={denom.min():.6f}, max={denom.max():.6f}, mean={denom.mean():.6f}")
             print(f"    corr (before clip): min={corr.min():.6f}, max={corr.max():.6f}, mean={corr.mean():.6f}")
 
-        # Tukey's biweight weighting
-        # r = 1.0 - corr  # Residual
-        # s = np.median(np.abs(r - np.median(r))) + 1e-9  # Scale estimate (MAD)
-        # t = r / (4.685 * s)  # Normalized residual (4.685 for 95% efficiency)
-        # # Use much larger tuning constant for homogeneous data
-
         r = 1.0 - corr
-        r_centered = r - np.median(r)               # now median(r_centered) ≈ 0
-        s = np.median(np.abs(r_centered)) + 1e-9    # MAD of centered residuals
-        # t = r_centered / (4.685 * s)               # or a slightly larger constant if you like
+        r_centered = r - np.median(r)
+        s = np.median(np.abs(r_centered)) + 1e-9
         t = r / (1.345 * s)
         w = 1.0 / np.maximum(1.0, np.abs(t))
 
@@ -251,11 +216,6 @@ def _iterative_reweight(
         if it == 0:
             print(f"    r (1-corr): min={r.min():.6f}, max={r.max():.6f}, mean={r.mean():.6f}")
             print(f"    median(r): {np.median(r):.6f}")
-        
-        # w = (1 - t**2)**2
-        # w[t >= 1] = 0.0  # Zero weight for extreme outliers
-
-        # w = 1.0 / (1.0 + (t / 2.0)**2)  # Soft decay function
 
         if it == 0:
             print(f"    w (before clip): min={w.min():.6f}, max={w.max():.6f}, sum={w.sum():.6f}")
@@ -370,7 +330,6 @@ def _timm_pretrained_models_small(verbose=True):
     if verbose:
         print(f"[timm] after ImageNet filter: {len(all_ok)} models")
         print(f"[timm] small/mid retained:    {len(small_mid)} models")
-        # peek a few families so you can sanity-check
         for m in sorted(small_mid):
             print("  ", m)
     return small_mid[80:]
@@ -393,7 +352,6 @@ def _register_all_layers_safely(model: nn.Module, leaf_only: bool = True):
       layer_names: List[str]        # stable, unique names in traversal order
       activations: Dict[str,Tensor] # filled during forward; clear() per batch
     """
-    # ---------- config: what to SKIP / KEEP ----------
     _MICRO_TYPES = (
         nn.ReLU, nn.GELU, nn.SiLU, nn.LeakyReLU, nn.PReLU, nn.Tanh, nn.Sigmoid, nn.Hardswish,
         nn.Dropout, nn.Dropout2d, nn.Dropout3d, nn.AlphaDropout,
@@ -413,7 +371,6 @@ def _register_all_layers_safely(model: nn.Module, leaf_only: bool = True):
         r"\b(layerscale|layer_scale)\b",
     ])
 
-    # things we DO want to keep even if theyre simple (readouts / stage boundaries)
     _KEEP_NAME_PATTERNS = tuple(re.compile(p) for p in [
         r"\b(stem|patch_embed|conv1)\b",
         r"\b(layer[1-4](?:\.\d+)?(?:_out)?)\b",          # resnet stages / blocks
@@ -429,7 +386,7 @@ def _register_all_layers_safely(model: nn.Module, leaf_only: bool = True):
         return any(p.search(lname) for p in _KEEP_NAME_PATTERNS)
 
     def _should_skip_micro(module: nn.Module, name: str) -> bool:
-        # skip known micro layers unless theyre meaningful readouts by name
+        # skip known micro layers unless they're meaningful readouts by name
         if isinstance(module, _MICRO_TYPES) and not _looks_meaningful(name):
             return True
         lname = name.lower()
@@ -439,7 +396,6 @@ def _register_all_layers_safely(model: nn.Module, leaf_only: bool = True):
 
     # ---------- helpers ----------
     def _pick_tensor(out):
-        # Accept a single Tensor, or search tuples/lists/dicts for the first Tensor.
         if isinstance(out, torch.Tensor):
             return out
         if isinstance(out, (tuple, list)):
@@ -467,7 +423,7 @@ def _register_all_layers_safely(model: nn.Module, leaf_only: bool = True):
     activations: dict[str, torch.Tensor] = {}
     layer_names: list[str] = []
     used_names: set[str] = set()
-    handles = []  # we keep them to avoid GC; you can choose to remove later if desired
+    handles = []
 
     def _unique(name: str) -> str:
         if name not in used_names:
@@ -511,7 +467,7 @@ def _register_all_layers_safely(model: nn.Module, leaf_only: bool = True):
                     # offload to CPU immediately to release GPU memory
                     activations[nm] = t.detach().to("cpu", copy=True).contiguous()
                 except Exception:
-                    # swallow edge cases; dont kill the run for one layer
+                    # swallow edge cases; don't kill the run for one layer
                     pass
             return _hook
 
@@ -522,9 +478,6 @@ def _register_all_layers_safely(model: nn.Module, leaf_only: bool = True):
             # some modules may refuse hooks; ignore them
             pass
 
-    # NOTE:
-    # - You should `activations.clear()` after each batch.
-    # - If you want to remove hooks later, keep `handles` and call h.remove() per handle.
     return layer_names, activations
 
 def run_nod_pipeline_pretrained(
@@ -533,7 +486,7 @@ def run_nod_pipeline_pretrained(
     batch_size: int,
     num_workers: int,
     device: str,
-    rdm_level: str = "class",                     # "image" or "class"
+    rdm_level: str = "class", # "image" or "class"
 ) -> Dict[str, Dict[str, Any]]:
     """
     For each architecture and seed:
@@ -603,7 +556,7 @@ def run_nod_pipeline_pretrained(
                     nod_ds, batch_size=batch_size, shuffle=False,
                     num_workers=num_workers, pin_memory=True, persistent_workers=False
                 )
-
+                
                 # hook almost all layers safely
                 candidate_layers, activations = _register_all_layers_safely(model)
                 if not candidate_layers:
@@ -740,9 +693,6 @@ def safe_loader(path: str):
 class FilteredImageFolder(ImageFolder):
     def __init__(self, root, transform=None, target_transform=None,
                  loader=None, is_valid_file=None, map_file=None):
-        # self._label_map = _load_imagenet_label_map([
-        #     os.path.join("../", "imagenet_label.txt")
-        # ])
 
         label_map_candidates = []
 
@@ -770,9 +720,6 @@ class FilteredImageFolder(ImageFolder):
             idxs = [cls_idx for _, cls_idx in self.samples]
             counts = np.bincount(np.asarray(idxs), minlength=len(self.classes))
 
-        # print("[INFO] Class image counts:")
-        # for i, cname in enumerate(self.classes):
-        #     print(f"{cname}, {int(counts[i])}")
 
     def find_classes(self, directory: str):
         classes = [d.name for d in os.scandir(directory) if d.is_dir()]
@@ -866,8 +813,8 @@ def run_mri_weighting_by_roi(
 
 
 def compute_seed_roi_alignment(
-    nod_rdms: Dict[str, np.ndarray],         # {arch: (n_seeds, D)}
-    roi_results: Dict[str, Dict[str, Any]],  # output of run_mri_weighting_by_roi
+    nod_rdms: Dict[str, np.ndarray],
+    roi_results: Dict[str, Dict[str, Any]],
     use_seed_weights: bool = True,
 ) -> Dict[str, Dict[str, Any]]:
     """
@@ -958,7 +905,7 @@ def compute_seed_roi_alignment(
                 d_seed_vs_roi_simple[idx_in_used] = float(spearman_distance(v, roi_simple))
                 d_seed_vs_roi_rew[idx_in_used]    = float(spearman_distance(v, roi_rew))
 
-                # ---- record every seeds distances (flat record) ----
+                # ---- record every seeds distances (flat record) ----
                 flat_records.append({
                     "arch": arch,
                     "seed_index": seed_ids[idx_in_used],
@@ -1098,7 +1045,7 @@ def _ridge_fit_single_target(X: np.ndarray,
             # Symmetric � eigh
             evals, V = np.linalg.eigh(G)  # G = V diag(evals) V^T
             Vt_b = V.T @ b
-            # For validation predictions, well need Xvl @ w(a)
+            # For validation predictions, we'll need Xvl @ w(a)
             per_fold_cache.append(("primal", (evals, V, Vt_b, Xvl)))
         else:
             # DUAL: eig of K = Xtr Xtr^T (size m x m)
@@ -1178,7 +1125,7 @@ def ridge_layers_per_seed_vs_fmri_means(
       1) grab X = (D, L) from the only seed
       2) collect all ROIs whose vector dim == D
       3) run ONE alpha-search over ALL those ROIs (fast)
-      4) for EACH ROI, call _ridge_fit_single_target with that alpha (keeps your logic)
+      4) for EACH ROI, call _ridge_fit_single_target with that alpha (keeps logic)
       5) write back in the same format as before
     """
     alphas = np.logspace(np.log10(alpha_min), np.log10(alpha_max), n_alphas).astype(np.float32)
@@ -1190,7 +1137,6 @@ def ridge_layers_per_seed_vs_fmri_means(
             continue
 
         S, L, D = SLD.shape
-        # you said: "we don't have seeds anymore" -> we expect S == 1
         X_orig = SLD[0].T.astype(np.float32, copy=False)   # (D, L)
         N = X_orig.shape[0]
 
@@ -1344,7 +1290,6 @@ def ridge_layers_per_seed_vs_fmri_means(
                 best_scores_rew = scores_rew
                 best_alpha_rew  = a
 
-        # ----- FINAL PER-ROI FIT USING YOUR HELPER -----
         arch_res: Dict[str, Any] = {}
         for idx, roi in enumerate(roi_keys):
             print("idx: ", idx, "  roi: ", roi)
@@ -1416,7 +1361,6 @@ def export_ridge_layer_weights_long(
                     alpha = rec["alpha"]
                     cv    = rec["cv_r2_mean"]
 
-                    # shape is (1, L) in your current pipeline (single seed)
                     wvec = np.asarray(rec["layer_weights"], dtype=np.float32).ravel()
                     # absolute-weight ranks (1 = largest |w|)
                     order = np.argsort(-np.abs(wvec))
@@ -1535,7 +1479,6 @@ def export_layerwise_alignment_pre_ridge(
             if E.ndim == 3:
                 # Expect (1, L, D)
                 if E.shape[0] != 1:
-                    # If you truly have >1 seeds, stop early to avoid silent mistakes
                     raise ValueError(f"Expected single seed for arch '{arch}', got shape {E.shape}")
                 E = E[0]  # -> (L, D)
             if E.ndim != 2 or E.size == 0:

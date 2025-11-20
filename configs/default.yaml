@@ -10,13 +10,6 @@ experiment_name: default   #  used for output folders / checkpoints
 #  DATA PATHS
 # ----------------------------------------------------------------------
 data:
-  dataset: cifar100                        #  Options: 'cifar10', 'cifar100', 'imagenet_tiny', 'imagenet_full'
-  cifar100_root: ./data                    #  path to CIFAR-100 dataset (will auto-download)
-  imagenet_root: /datasets/imagenet        #  should contain 'train' and 'val' (legacy)
-  imagenet_tiny_root: /datasets/imagenet   #  path to ImageNet-1k Tiny dataset
-  imagenet_full_root: /datasets/imagenet   #  path to full ImageNet dataset
-  # fmri_rdm_file: C:/Users/BrainInspired/Documents/GitHub/NaturalObjectDataset-Processing/Nick_RDMs/outputs #  shape: [subjects, items, items]
-  # nod_root: C:/Users/BrainInspired/Documents/GitHub/NaturalObjectDataset-Processing/NOD/stimuli/imagenet
   fmri_rdm_file: /home/wallacelab/teba/multimodal_brain_inspired/NOD/Nick_RDMs/outputs
   nod_root: /home/wallacelab/teba/multimodal_brain_inspired/NOD/imagenet
 
@@ -24,27 +17,6 @@ data:
 #  TRAINING + MODEL HYPERPARAMETERS
 # ----------------------------------------------------------------------
 training:
-  architectures:                           #  torchvision model names
-    # - alexnet_pretrained
-    # - alexnet
-    # - resnet50
-    # - vit_b_16
-    # - clip_RN50
-    # - clip_ViT-B/16
-
-    - alexnet
-    - vgg16_bn
-    - resnet18
-    - resnet50
-    - resnet101
-    - resnext50_32x4d
-    - densenet121
-    - mobilenet_v3_large
-    - convnext_tiny
-    - vit_b_16
-
-
-    
   n_seeds: 30
   epochs: 200                               #  ImageNet canonical schedule
   batch_size: 128
@@ -58,11 +30,6 @@ training:
 #  OUTPUT LOCATIONS
 # ---------------------------------------------s-------------------------
 paths:
-  # checkpoint_root: ckpts/${experiment_name}
-  # checkpoint_root: "T:/seeds_checkpoints"  #  path to save model checkpoints
-  # checkpoint_root: teba.psy.vanderbilt.edu/wallacelab/seeds_checkpoints
-  checkpoint_root: /home/wallacelab/teba/multimodal_brain_inspired/seeds_checkpoints
-  # checkpoint_root: /home/wallacelab/teba/seeds_checkpoints_marren
   output_root:    /home/wallacelab/teba/multimodal_brain_inspired/seeds_checkpoints/pretrained/nonorm_huber/new6
   metrics_csv:    ${paths.output_root}/metrics_classification.csv
   seed_weights_file:  ${paths.output_root}/seed_weights.npz
