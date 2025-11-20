@@ -1,0 +1,39 @@
+name: seeds
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - datalad
+  - git
+  - git-annex
+  - pip
+  - pip:
+    # Deep Learning
+    - torch>=2.2
+    - torchvision>=0.17
+    - timm
+    
+    # Data Science & Math
+    - numpy>=1.25
+    - scipy>=1.11
+    - scikit-learn>=1.4
+    - pandas
+    - openpyxl
+    
+    # Neuroimaging
+    - nilearn
+    - nibabel
+    
+    # Visualization
+    - matplotlib>=3.8
+    - seaborn
+    - streamlit>=1.34
+    - dataframe-image
+    
+    # Utilities
+    - tqdm>=4.66
+    - pyyaml>=6.0
+    - ftfy
+    - regex
+    - huggingface-hub
